@@ -140,40 +140,40 @@ async def show_id(update, ctx):
 
 def main():
     TOKEN = os.getenv("TOKEN")
-
     if not TOKEN:
         print("❌ TOKEN НЕ НАЙДЕН")
         return
 
     print("=== BOT STARTING ===")
 
-    async def start_bot():
-        bot = Bot(token=TOKEN)
+    bot = Bot(token=TOKEN)
+
+    # удаляем старый webhook, await прямо через loop
+    async def init_bot():
         try:
             await bot.delete_webhook(drop_pending_updates=True)
             print("✅ Старая сессия удалена")
         except Exception as e:
             print("⚠ Не удалось удалить старую сессию:", e)
 
-        # создаём файл если его нет
+        # создаём файл meals.json если его нет
         if not os.path.exists(FILE):
             with open(FILE, "w", encoding="utf-8") as f:
                 f.write("[]")
 
         app = Application.builder().token(TOKEN).build()
 
-        # тут добавляем все CommandHandler
+        # регистрируем команды
         app.add_handler(CommandHandler("add", add))
         app.add_handler(CommandHandler("list", list_meals))
         app.add_handler(CommandHandler("random", random_meal))
         app.add_handler(CommandHandler("id", show_id))
-        # оставим edit и del, если они будут реализованы позже
-        # app.add_handler(CommandHandler("edit", edit))
-        # app.add_handler(CommandHandler("del", delete))
 
+        # запускаем polling напрямую
         await app.run_polling()
 
-    asyncio.run(start_bot())
+    # запускаем init_bot через текущий event loop
+    asyncio.get_event_loop().create_task(init_bot())
 
 
 if __name__ == "__main__":
