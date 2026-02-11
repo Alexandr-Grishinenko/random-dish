@@ -1,9 +1,9 @@
 import os
 import json
 import random
-from iogram import Bot, Dispatcher, types
-from iogram.contrib.middlewares.logging import LoggingMiddleware
-from iogram.types import ParseMode
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.types import ParseMode
 
 TOKEN = os.getenv("TOKEN")
 ALLOWED_CHAT = int(os.getenv("CHAT_ID", "0"))
