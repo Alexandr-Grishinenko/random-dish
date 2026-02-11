@@ -118,7 +118,20 @@ async def random_meal(update, ctx):
 
 def main():
     TOKEN = os.getenv("TOKEN")
-    print("=== BOT STARTING ===")  
+
+    if not TOKEN:
+        print("❌ TOKEN НЕ НАЙДЕН")
+        return
+
+    print("=== BOT STARTING ===")
+
+    bot = telegram.Bot(token=TOKEN)
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        print("✅ Старая сессия удалена")
+    except Exception as e:
+        print("⚠ Не удалось удалить старую сессию:", e)
+
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("add", add))
