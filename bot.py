@@ -2,15 +2,13 @@ import os
 import json
 import random
 import asyncio
-import telegram
-from telegram import Bot
-from telegram import Update
+from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 FILE = "meals.json"
 ALLOWED_CHAT = int(os.getenv("CHAT_ID", "0"))
 
-
+# ------------------- helpers -------------------
 def load():
     try:
         with open(FILE, "r", encoding="utf-8") as f:
@@ -18,23 +16,19 @@ def load():
     except:
         return []
 
-
 def save(data):
     with open(FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-
 def next_id(data):
     return max([m["id"] for m in data], default=0) + 1
 
-
-async def guard(update):
-    # печатаем id и юзера для диагностики
+async def guard(update: Update):
     print(f"[GUARD] Chat ID: {update.effective_chat.id}, User: {update.effective_user.username}")
     return update.effective_chat.id == ALLOWED_CHAT
 
-
-async def add(update, ctx):
+# ------------------- commands -------------------
+async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     print(f"[ADD] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
         print("[ADD] доступ запрещён")
@@ -49,29 +43,17 @@ async def add(update, ctx):
         return
 
     category = parts[1] if len(parts) > 1 and parts[1] else "Без категории"
-
-    if len(parts) > 2 and parts[2]:
-        ing = [i.strip().lower() for i in parts[2].split(",")]
-    else:
-        ing = []
+    ing = [i.strip().lower() for i in parts[2].split(",")] if len(parts) > 2 and parts[2] else []
 
     data = load()
-
-    meal = {
-        "id": next_id(data),
-        "name": name,
-        "category": category.lower(),
-        "ingredients": ing
-    }
-
+    meal = {"id": next_id(data), "name": name, "category": category.lower(), "ingredients": ing}
     data.append(meal)
     save(data)
 
     await update.message.reply_text(f"Добавлено: {name}")
     print(f"[ADD] Добавлено: {meal}")
 
-
-async def list_meals(update, ctx):
+async def list_meals(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     print(f"[LIST] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
         print("[LIST] доступ запрещён")
@@ -86,18 +68,15 @@ async def list_meals(update, ctx):
     await update.message.reply_text(line)
     print(f"[LIST] {line}")
 
-
-async def random_meal(update, ctx):
+async def random_meal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     print(f"[RANDOM] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
         print("[RANDOM] доступ запрещён")
         return
 
     data = load()
-
     cat = None
     ing = None
-
     for a in ctx.args:
         if a.startswith("cat="):
             cat = a[4:]
@@ -105,16 +84,11 @@ async def random_meal(update, ctx):
             ing = a[4:]
 
     res = data
-
     if cat:
         res = [m for m in res if m["category"] == cat.lower()]
-
     if ing:
         need = [i.strip().lower() for i in ing.split(",")]
-        res = [
-            m for m in res
-            if all(i in m["ingredients"] for i in need)
-        ]
+        res = [m for m in res if all(i in m["ingredients"] for i in need)]
 
     if not res:
         await update.message.reply_text("Ничего не найдено")
@@ -122,22 +96,19 @@ async def random_meal(update, ctx):
         return
 
     m = random.choice(res)
-
     txt = f"🍽 {m['name']}\nКатегория: {m['category']}"
     if m["ingredients"]:
         txt += "\nСостав: " + ", ".join(m["ingredients"])
-
     await update.message.reply_text(txt)
     print(f"[RANDOM] Отправлено: {txt}")
 
-
-async def show_id(update, ctx):
+async def show_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = update.effective_user.username
     await update.message.reply_text(f"Chat ID: {chat_id}\nUser: {user}")
     print(f"[ID] {user} / {chat_id}")
 
-
+# ------------------- main -------------------
 def main():
     TOKEN = os.getenv("TOKEN")
     if not TOKEN:
@@ -146,22 +117,20 @@ def main():
 
     print("=== BOT STARTING ===")
 
-    # удаляем старый webhook асинхронно
-    import asyncio
-    from telegram import Bot
-    bot = Bot(token=TOKEN)
-    try:
-        asyncio.get_event_loop().run_until_complete(
-            bot.delete_webhook(drop_pending_updates=True)
-        )
-        print("✅ Старая сессия удалена")
-    except Exception as e:
-        print("⚠ Не удалось удалить старую сессию:", e)
-
     # создаём файл meals.json если его нет
     if not os.path.exists(FILE):
         with open(FILE, "w", encoding="utf-8") as f:
             f.write("[]")
+
+    # удаляем старый webhook и сбрасываем все старые updates
+    bot = Bot(token=TOKEN)
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(bot.delete_webhook(drop_pending_updates=True))
+        loop.run_until_complete(bot.get_updates(offset=-1))
+        print("✅ Старая сессия Telegram очищена")
+    except Exception as e:
+        print("⚠ Не удалось удалить старую сессию:", e)
 
     # создаём приложение и регистрируем команды
     app = Application.builder().token(TOKEN).build()
@@ -170,9 +139,8 @@ def main():
     app.add_handler(CommandHandler("random", random_meal))
     app.add_handler(CommandHandler("id", show_id))
 
-    # Блокирующий запуск polling — держит контейнер живым
+    # блокирующий запуск polling — держит контейнер живым
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
