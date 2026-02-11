@@ -146,25 +146,31 @@ def main():
 
     print("=== BOT STARTING ===")
 
-    # удаляем старый webhook
+    # удаляем старый webhook асинхронно
+    import asyncio
+    from telegram import Bot
     bot = Bot(token=TOKEN)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(bot.delete_webhook(drop_pending_updates=True))
-    print("✅ Старая сессия удалена")
+    try:
+        asyncio.get_event_loop().run_until_complete(
+            bot.delete_webhook(drop_pending_updates=True)
+        )
+        print("✅ Старая сессия удалена")
+    except Exception as e:
+        print("⚠ Не удалось удалить старую сессию:", e)
 
+    # создаём файл meals.json если его нет
     if not os.path.exists(FILE):
         with open(FILE, "w", encoding="utf-8") as f:
             f.write("[]")
 
+    # создаём приложение и регистрируем команды
     app = Application.builder().token(TOKEN).build()
-
-    # команды
     app.add_handler(CommandHandler("add", add))
     app.add_handler(CommandHandler("list", list_meals))
     app.add_handler(CommandHandler("random", random_meal))
     app.add_handler(CommandHandler("id", show_id))
 
-    # основной запуск polling — держит контейнер живым
+    # Блокирующий запуск polling — держит контейнер живым
     app.run_polling()
 
 
