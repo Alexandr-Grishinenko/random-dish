@@ -1,7 +1,9 @@
+import os
 import json
 import random
+import asyncio
 import telegram
-import os
+from telegram import Bot
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -126,20 +128,24 @@ def main():
 
     print("=== BOT STARTING ===")
 
-    bot = telegram.Bot(token=TOKEN)
-    try:
-        bot.delete_webhook(drop_pending_updates=True)
-        print("✅ Старая сессия удалена")
-    except Exception as e:
-        print("⚠ Не удалось удалить старую сессию:", e)
+    async def start_bot():
+        bot = Bot(token=TOKEN)
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            print("✅ Старая сессия удалена")
+        except Exception as e:
+            print("⚠ Не удалось удалить старую сессию:", e)
 
-    app = Application.builder().token(TOKEN).build()
+        app = Application.builder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("add", add))
-    app.add_handler(CommandHandler("list", list_meals))
-    app.add_handler(CommandHandler("random", random_meal))
+        # тут добавляем все CommandHandler
+        app.add_handler(CommandHandler("add", add))
+        app.add_handler(CommandHandler("list", list_meals))
+        app.add_handler(CommandHandler("random", random_meal))
+        app.add_handler(CommandHandler("edit", edit))
+        app.add_handler(CommandHandler("del", delete))
 
-    app.run_polling()
+        await app.run_polling()
 
 
 if __name__ == "__main__":
