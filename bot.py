@@ -118,7 +118,7 @@ async def random_meal(update, ctx):
 
 def main():
     TOKEN = os.getenv("TOKEN")
-
+    print("=== BOT STARTING ===")  
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("add", add))
