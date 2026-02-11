@@ -29,11 +29,15 @@ def next_id(data):
 
 
 async def guard(update):
+    # печатаем id и юзера для диагностики
+    print(f"[GUARD] Chat ID: {update.effective_chat.id}, User: {update.effective_user.username}")
     return update.effective_chat.id == ALLOWED_CHAT
 
 
 async def add(update, ctx):
+    print(f"[ADD] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
+        print("[ADD] доступ запрещён")
         return
 
     text = " ".join(ctx.args)
@@ -64,10 +68,13 @@ async def add(update, ctx):
     save(data)
 
     await update.message.reply_text(f"Добавлено: {name}")
+    print(f"[ADD] Добавлено: {meal}")
 
 
 async def list_meals(update, ctx):
+    print(f"[LIST] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
+        print("[LIST] доступ запрещён")
         return
 
     data = load()
@@ -77,10 +84,13 @@ async def list_meals(update, ctx):
 
     line = ", ".join(f'{m["id"]} {m["name"]}' for m in data)
     await update.message.reply_text(line)
+    print(f"[LIST] {line}")
 
 
 async def random_meal(update, ctx):
+    print(f"[RANDOM] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
+        print("[RANDOM] доступ запрещён")
         return
 
     data = load()
@@ -108,6 +118,7 @@ async def random_meal(update, ctx):
 
     if not res:
         await update.message.reply_text("Ничего не найдено")
+        print("[RANDOM] ничего не найдено")
         return
 
     m = random.choice(res)
@@ -117,6 +128,14 @@ async def random_meal(update, ctx):
         txt += "\nСостав: " + ", ".join(m["ingredients"])
 
     await update.message.reply_text(txt)
+    print(f"[RANDOM] Отправлено: {txt}")
+
+
+async def show_id(update, ctx):
+    chat_id = update.effective_chat.id
+    user = update.effective_user.username
+    await update.message.reply_text(f"Chat ID: {chat_id}\nUser: {user}")
+    print(f"[ID] {user} / {chat_id}")
 
 
 def main():
@@ -136,16 +155,25 @@ def main():
         except Exception as e:
             print("⚠ Не удалось удалить старую сессию:", e)
 
+        # создаём файл если его нет
+        if not os.path.exists(FILE):
+            with open(FILE, "w", encoding="utf-8") as f:
+                f.write("[]")
+
         app = Application.builder().token(TOKEN).build()
 
         # тут добавляем все CommandHandler
         app.add_handler(CommandHandler("add", add))
         app.add_handler(CommandHandler("list", list_meals))
         app.add_handler(CommandHandler("random", random_meal))
-        app.add_handler(CommandHandler("edit", edit))
-        app.add_handler(CommandHandler("del", delete))
+        app.add_handler(CommandHandler("id", show_id))
+        # оставим edit и del, если они будут реализованы позже
+        # app.add_handler(CommandHandler("edit", edit))
+        # app.add_handler(CommandHandler("del", delete))
 
         await app.run_polling()
+
+    asyncio.run(start_bot())
 
 
 if __name__ == "__main__":
