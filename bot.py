@@ -41,6 +41,8 @@ def is_allowed(chat_id):
 # --------------------- Команды ---------------------
 @dp.message(Command(commands=["add"]))
 async def add(msg: Message):
+    print(f"ALLOWED_CHAT: {ALLOWED_CHAT}")
+    print(f"msg.chat.id: {msg.chat.id}")
     if not is_allowed(msg.chat.id):
         logging.info(f"[ADD] доступ запрещён: {msg.from_user.username}")
         return
