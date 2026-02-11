@@ -1,13 +1,19 @@
 import os
 import json
 import random
-from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from iogram import Bot, Dispatcher, types
+from iogram.contrib.middlewares.logging import LoggingMiddleware
+from iogram.types import ParseMode
 
-FILE = "meals.json"
-ALLOWED_CHAT = int(os.getenv("CHAT_ID", "0"))
 TOKEN = os.getenv("TOKEN")
+ALLOWED_CHAT = int(os.getenv("CHAT_ID", "0"))
+FILE = "meals.json"
 
+bot = Bot(token=TOKEN)
+dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
+
+# --------------------- Работа с файлами ---------------------
 def load():
     try:
         with open(FILE, "r", encoding="utf-8") as f:
@@ -22,25 +28,31 @@ def save(data):
 def next_id(data):
     return max([m["id"] for m in data], default=0) + 1
 
-async def guard(update: Update):
-    print(f"[GUARD] Chat ID: {update.effective_chat.id}, User: {update.effective_user.username}")
-    return update.effective_chat.id == ALLOWED_CHAT
+def is_allowed(chat_id):
+    return chat_id == ALLOWED_CHAT
 
-async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    print(f"[ADD] from {update.effective_user.username} / {update.effective_chat.id}")
-    if not await guard(update):
+# --------------------- Команды ---------------------
+@dp.message("/add")
+async def add(msg: types.Message, args: list[str]):
+    print(f"[ADD] from {msg.from_user.username} / {msg.chat.id}")
+    if not is_allowed(msg.chat.id):
         print("[ADD] доступ запрещён")
         return
 
-    text = " ".join(ctx.args)
+    text = " ".join(args)
     parts = [p.strip() for p in text.split("|")]
+
     name = parts[0] if parts[0] else None
     if not name:
-        await update.message.reply_text("Нужно минимум название")
+        await msg.answer("Нужно минимум название")
         return
 
     category = parts[1] if len(parts) > 1 and parts[1] else "Без категории"
-    ing = [i.strip().lower() for i in parts[2].split(",")] if len(parts) > 2 and parts[2] else []
+
+    if len(parts) > 2 and parts[2]:
+        ing = [i.strip().lower() for i in parts[2].split(",")]
+    else:
+        ing = []
 
     data = load()
     meal = {
@@ -51,35 +63,42 @@ async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     }
     data.append(meal)
     save(data)
-    await update.message.reply_text(f"Добавлено: {name}")
+
+    await msg.answer(f"Добавлено: {name}")
     print(f"[ADD] Добавлено: {meal}")
 
-async def list_meals(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    print(f"[LIST] from {update.effective_user.username} / {update.effective_chat.id}")
-    if not await guard(update):
+@dp.message("/list")
+async def list_meals(msg: types.Message):
+    print(f"[LIST] from {msg.from_user.username} / {msg.chat.id}")
+    if not is_allowed(msg.chat.id):
         print("[LIST] доступ запрещён")
         return
 
     data = load()
     if not data:
-        await update.message.reply_text("Список пуст")
+        await msg.answer("Список пуст")
         return
+
     line = ", ".join(f'{m["id"]} {m["name"]}' for m in data)
-    await update.message.reply_text(line)
+    await msg.answer(line)
     print(f"[LIST] {line}")
 
-async def random_meal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    print(f"[RANDOM] from {update.effective_user.username} / {update.effective_chat.id}")
-    if not await guard(update):
+@dp.message("/random")
+async def random_meal(msg: types.Message, args: list[str]):
+    print(f"[RANDOM] from {msg.from_user.username} / {msg.chat.id}")
+    if not is_allowed(msg.chat.id):
         print("[RANDOM] доступ запрещён")
         return
 
     data = load()
     cat = None
     ing = None
-    for a in ctx.args:
-        if a.startswith("cat="): cat = a[4:]
-        if a.startswith("ing="): ing = a[4:]
+
+    for a in args:
+        if a.startswith("cat="):
+            cat = a[4:]
+        if a.startswith("ing="):
+            ing = a[4:]
 
     res = data
     if cat:
@@ -89,7 +108,7 @@ async def random_meal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         res = [m for m in res if all(i in m["ingredients"] for i in need)]
 
     if not res:
-        await update.message.reply_text("Ничего не найдено")
+        await msg.answer("Ничего не найдено")
         print("[RANDOM] ничего не найдено")
         return
 
@@ -97,35 +116,29 @@ async def random_meal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     txt = f"🍽 {m['name']}\nКатегория: {m['category']}"
     if m["ingredients"]:
         txt += "\nСостав: " + ", ".join(m["ingredients"])
-    await update.message.reply_text(txt)
+
+    await msg.answer(txt)
     print(f"[RANDOM] Отправлено: {txt}")
 
-async def show_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    user = update.effective_user.username
-    await update.message.reply_text(f"Chat ID: {chat_id}\nUser: {user}")
+@dp.message("/id")
+async def show_id(msg: types.Message):
+    chat_id = msg.chat.id
+    user = msg.from_user.username
+    await msg.answer(f"Chat ID: {chat_id}\nUser: {user}")
     print(f"[ID] {user} / {chat_id}")
 
-def main():
-    if not TOKEN:
-        print("❌ TOKEN НЕ НАЙДЕН")
-        return
-
-    print("=== BOT STARTING ===")
-
-    # создаём meals.json если нет
+# --------------------- Запуск ---------------------
+async def main():
+    # создаём файл meals.json если его нет
     if not os.path.exists(FILE):
         with open(FILE, "w", encoding="utf-8") as f:
             f.write("[]")
 
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("add", add))
-    app.add_handler(CommandHandler("list", list_meals))
-    app.add_handler(CommandHandler("random", random_meal))
-    app.add_handler(CommandHandler("id", show_id))
-
-    # drop_pending_updates=True сбросит старые апдейты, контейнер живёт пока polling
-    app.run_polling(drop_pending_updates=True)
+    print("=== BOT STARTING ===")
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("✅ Старая сессия Telegram очищена")
+    await dp.start_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
