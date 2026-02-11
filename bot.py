@@ -1,5 +1,6 @@
 import json
 import random
+import telegram
 import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
