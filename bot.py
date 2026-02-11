@@ -7,8 +7,9 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 FILE = "meals.json"
 ALLOWED_CHAT = int(os.getenv("CHAT_ID", "0"))
+TOKEN = os.getenv("TOKEN")
 
-# ------------------- helpers -------------------
+# ----------------- Работа с файлами -----------------
 def load():
     try:
         with open(FILE, "r", encoding="utf-8") as f:
@@ -23,11 +24,12 @@ def save(data):
 def next_id(data):
     return max([m["id"] for m in data], default=0) + 1
 
+# ----------------- Guard -----------------
 async def guard(update: Update):
     print(f"[GUARD] Chat ID: {update.effective_chat.id}, User: {update.effective_user.username}")
     return update.effective_chat.id == ALLOWED_CHAT
 
-# ------------------- commands -------------------
+# ----------------- Команды -----------------
 async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     print(f"[ADD] from {update.effective_user.username} / {update.effective_chat.id}")
     if not await guard(update):
@@ -46,10 +48,14 @@ async def add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ing = [i.strip().lower() for i in parts[2].split(",")] if len(parts) > 2 and parts[2] else []
 
     data = load()
-    meal = {"id": next_id(data), "name": name, "category": category.lower(), "ingredients": ing}
+    meal = {
+        "id": next_id(data),
+        "name": name,
+        "category": category.lower(),
+        "ingredients": ing
+    }
     data.append(meal)
     save(data)
-
     await update.message.reply_text(f"Добавлено: {name}")
     print(f"[ADD] Добавлено: {meal}")
 
@@ -77,6 +83,7 @@ async def random_meal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = load()
     cat = None
     ing = None
+
     for a in ctx.args:
         if a.startswith("cat="):
             cat = a[4:]
@@ -108,21 +115,15 @@ async def show_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Chat ID: {chat_id}\nUser: {user}")
     print(f"[ID] {user} / {chat_id}")
 
-# ------------------- main -------------------
+# ----------------- Main -----------------
 def main():
-    TOKEN = os.getenv("TOKEN")
     if not TOKEN:
         print("❌ TOKEN НЕ НАЙДЕН")
         return
 
     print("=== BOT STARTING ===")
 
-    # создаём файл meals.json если его нет
-    if not os.path.exists(FILE):
-        with open(FILE, "w", encoding="utf-8") as f:
-            f.write("[]")
-
-    # удаляем старый webhook и сбрасываем все старые updates
+    # Создаем Bot и сбрасываем старые webhook/updates
     bot = Bot(token=TOKEN)
     loop = asyncio.get_event_loop()
     try:
@@ -130,17 +131,22 @@ def main():
         loop.run_until_complete(bot.get_updates(offset=-1))
         print("✅ Старая сессия Telegram очищена")
     except Exception as e:
-        print("⚠ Не удалось удалить старую сессию:", e)
+        print("⚠ Не удалось очистить старые апдейты:", e)
 
-    # создаём приложение и регистрируем команды
+    # Создаем meals.json если нет
+    if not os.path.exists(FILE):
+        with open(FILE, "w", encoding="utf-8") as f:
+            f.write("[]")
+
+    # Создаем приложение и регистрируем команды
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("add", add))
     app.add_handler(CommandHandler("list", list_meals))
     app.add_handler(CommandHandler("random", random_meal))
     app.add_handler(CommandHandler("id", show_id))
 
-    # блокирующий запуск polling — держит контейнер живым
-    app.run_polling()
+    # Блокирующий polling — контейнер остаётся живым
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
